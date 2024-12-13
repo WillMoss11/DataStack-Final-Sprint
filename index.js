@@ -4,7 +4,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
-const Poll = require('./models/Poll');  // Add Poll model import
+const Poll = require('./models/Poll');  // Added Poll model import
 
 const PORT = 3000;
 const MONGO_URI = 'mongodb://localhost:27017/keyin_test';
