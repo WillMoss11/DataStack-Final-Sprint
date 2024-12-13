@@ -1,0 +1,43 @@
+<div class="navbar">
+    <a href="/dashboard" class="nav-button">Dashboard</a>
+    <a href="/createPoll" class="nav-button">Create Poll</a>
+    <a href="/logout" class="nav-button">Logout</a>
+</div>
+
+<div class="main-content">
+    <h1>Active Polls</h1>
+
+    <!-- Check if there are no polls -->
+    <% if (polls.length === 0) { %>
+        <p>No polls available. <a href="/createPoll">Create a poll</a></p>
+    <% } else { %>
+        <ul id="polls">
+            <% polls.forEach((poll) => { %>
+                <li class="poll-container" id="<%= poll._id %>">
+                    <h2><%= poll.question %></h2>
+                    <ul class="poll-options">
+                        <% poll.options.forEach((option) => { %>
+                            <li id="<%= poll._id %>_<%= option.answer %>">
+                                <strong><%= option.answer %>:</strong> <%= option.votes %> votes
+                            </li>
+                        <% }) %>
+                    </ul>
+
+                    <!-- Voting form for each poll -->
+                    <form action="/votePoll" method="POST" class="poll-form">
+                        <input type="hidden" name="pollId" value="<%= poll._id %>" />
+                        
+                        <!-- Loop through each option and create a vote button -->
+                        <% poll.options.forEach(option => { %>
+                            <button type="submit" name="selectedOption" value="<%= option.answer %>" class="action-button vote-button">
+                                Vote for <%= option.answer %>
+                            </button>
+                        <% }) %>
+                    </form>
+                </li>
+            <% }) %>
+        </ul>
+    <% } %>
+
+    <p><a href="/createPoll" class="action-button">Create a Poll</a></p>
+</div>

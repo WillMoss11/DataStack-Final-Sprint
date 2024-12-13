@@ -1,4 +1,10 @@
 <body>
+
+    <div class="navbar">
+        <a href="/dashboard" class="nav-button">Dashboard</a>
+        <a href="/viewPolls" class="nav-button">View All Polls</a>
+    </div>
+
     <div class="main-content">
         <h1>Create a New Poll</h1>
         <form action="/createPoll" method="POST">
@@ -20,6 +26,11 @@
         <% if (errorMessage) { %>
             <p class="error-message"><%= errorMessage %></p>
         <% } %>
+        
+
+        <% if (successMessage) { %>
+            <p class="success-message"><%= successMessage %></p>
+        <% } %>        
     </div>
 </body>
 </html>

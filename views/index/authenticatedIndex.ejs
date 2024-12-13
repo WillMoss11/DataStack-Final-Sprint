@@ -1,28 +1,44 @@
-<div class="main-content">
-    <h1>Active Polls</h1>
-    <ul id="polls">
-        <% polls.forEach((poll) => { %>
-            <li class="poll-container" id="<%= poll._id %>">
-                <h2><%= poll.question %></h2>
-                <ul class="poll-options">
-                    <% poll.options.forEach((option) => { %>
-                        <li id="<%= poll._id %>_<%= option.answer %>">
-                            <strong><%= option.answer %>:</strong> <%= option.votes %> votes
-                        </li>
-                    <% }) %>
-                </ul>
-                <form class="poll-form button-container">
-                    <% poll.options.forEach((option) => { %>
-                        <button class="action-button vote-button" type="submit" value="<%= option.answer %>" name="poll-option">
-                            Vote for <%= option.answer %>
-                        </button>
-                    <% }) %>
-                    <input type="text" style="display: none;" value="<%= poll._id %>" name="poll-id"/>
-                </form>
-            </li>
-        <% }) %>
-    </ul>
-</div>
-<script src="/frontend.js" type="application/javascript"></script>
+<body>
+    <div class="navbar">
+        <a href="/dashboard" class="nav-button">Dashboard</a>
+        <a href="/createPoll" class="nav-button">Create Poll</a>
+        <a href="/viewPolls" class="nav-button">View All Polls</a>
+        <a href="/logout" class="nav-button">Logout</a>
+    </div>
+
+    <div class="main-content">
+        <h1>Active Polls</h1>
+
+        <!-- Check if there are no polls -->
+        <% if (polls.length === 0) { %>
+            <p>No polls available. <a href="/createPoll" class="action-button">Create a Poll</a></p>
+        <% } else { %>
+            <ul id="polls">
+                <% polls.forEach((poll) => { %>
+                    <li class="poll-container" id="<%= poll._id %>">
+                        <h2><%= poll.question %></h2>
+                        <ul class="poll-options">
+                            <% poll.options.forEach((option) => { %>
+                                <li id="<%= poll._id %>_<%= option.answer %>">
+                                    <strong><%= option.answer %>:</strong> <%= option.votes %> votes
+                                </li>
+                            <% }) %>
+                        </ul>
+
+                        <!-- Voting Form -->
+                        <form action="/votePoll" method="POST" class="poll-form">
+                            <input type="hidden" name="pollId" value="<%= poll._id %>" /> <!-- Hidden poll ID -->
+                            <% poll.options.forEach(option => { %>
+                                <button type="submit" name="selectedOption" value="<%= option.answer %>" class="action-button vote-button">
+                                    Vote for <%= option.answer %>
+                                </button>
+                            <% }) %>
+                        </form>
+                    </li>
+                <% }) %>
+            </ul>
+        <% } %>
+    </div>
+
+    <script src="/frontend.js" type="application/javascript"></script>
 </body>
-</html>
