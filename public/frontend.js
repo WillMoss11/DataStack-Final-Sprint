@@ -5,55 +5,71 @@ const socket = new WebSocket('ws://localhost:3000/ws');
 socket.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
 
-    //TODO: Handle the events from the socket
+    if (data.type === 'newPoll') {
+        onNewPollAdded(data);
+    } else if (data.type === 'voteUpdate') {
+        onIncomingVote(data);
+    }
 });
 
-
-/**
- * Handles adding a new poll to the page when one is received from the server
- * 
- * @param {*} data The data from the server (ideally containing the new poll's ID and it's corresponding questions)
- */
+// Handles adding a new poll to the page when one is received from the server
 function onNewPollAdded(data) {
-    //TODO: Fix this to add the new poll to the page
-    
     const pollContainer = document.getElementById('polls');
-    const newPoll = null;
+    const newPoll = document.createElement('li');
+    newPoll.classList.add('poll-container');
+    newPoll.id = data.poll._id;
+
+    newPoll.innerHTML = `
+        <h2>${data.poll.question}</h2>
+        <ul class="poll-options">
+            ${data.poll.options.map(option => `
+                <li id="${data.poll._id}_${option.answer}">
+                    <strong>${option.answer}:</strong> ${option.votes} votes
+                </li>`).join('')}
+        </ul>
+        <form class="poll-form button-container">
+            ${data.poll.options.map(option => `
+                <button class="action-button vote-button" type="submit" value="${option.answer}" name="poll-option">
+                    Vote for ${option.answer}
+                </button>`).join('')}
+            <input type="text" style="display: none;" value="${data.poll._id}" name="poll-id"/>
+        </form>
+    `;
     pollContainer.appendChild(newPoll);
 
-    //TODO: Add event listeners to each vote button. This code might not work, it depends how you structure your polls on the poll page. However, it's left as an example 
-    //      as to what you might want to do to get clicking the vote options to actually communicate with the server
+    // Add event listeners for voting
     newPoll.querySelectorAll('.poll-form').forEach((pollForm) => {
         pollForm.addEventListener('submit', onVoteClicked);
     });
 }
 
-/**
- * Handles updating the number of votes an option has when a new vote is recieved from the server
- * 
- * @param {*} data The data from the server (probably containing which poll was updated and the new vote values for that poll)
- */
+// Handles updating the number of votes an option has when a new vote is received
 function onIncomingVote(data) {
-    
+    const poll = document.getElementById(data.pollId);
+    const optionsList = poll.querySelector('.poll-options');
+    optionsList.innerHTML = data.updatedOptions.map(option => `
+        <li id="${data.pollId}_${option.answer}">
+            <strong>${option.answer}:</strong> ${option.votes} votes
+        </li>`).join('');
 }
 
-/**
- * Handles processing a user's vote when they click on an option to vote
- * 
- * @param {FormDataEvent} event The form event sent after the user clicks a poll option to "submit" the form
- */
+// Handles processing a user's vote when they click on an option to vote
 function onVoteClicked(event) {
-    //Note: This function only works if your structure for displaying polls on the page hasn't changed from the template. If you change the template, you'll likely need to change this too
     event.preventDefault();
     const formData = new FormData(event.target);
 
     const pollId = formData.get("poll-id");
     const selectedOption = event.submitter.value;
-    
-    //TOOD: Tell the server the user voted
+
+    // Send the vote to the server
+    socket.send(JSON.stringify({
+        type: 'vote',
+        pollId: pollId,
+        selectedOption: selectedOption,
+    }));
 }
 
-//Adds a listener to each existing poll to handle things when the user attempts to vote
+// Add event listeners to existing polls
 document.querySelectorAll('.poll-form').forEach((pollForm) => {
     pollForm.addEventListener('submit', onVoteClicked);
 });
