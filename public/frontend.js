@@ -12,6 +12,29 @@ socket.addEventListener('message', (event) => {
     }
 });
 
+// Attempt to reconnect after a delay if the WebSocket connection is closed
+socket.addEventListener('close', () => {
+    console.log('WebSocket connection closed, attempting to reconnect...');
+    setTimeout(() => {
+        // Re-establish connection
+        socket = new WebSocket('ws://localhost:3000/ws');
+        setupWebSocketListeners(socket); // Reapply event listeners after reconnection
+    }, 5000); // Try to reconnect every 5 seconds
+});
+
+// Reapply WebSocket event listeners after reconnecting
+function setupWebSocketListeners(socket) {
+    socket.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'newPoll') {
+            onNewPollAdded(data);
+        } else if (data.type === 'voteUpdate') {
+            onIncomingVote(data);
+        }
+    });
+}
+
 // Handles adding a new poll to the page when one is received from the server
 function onNewPollAdded(data) {
     const pollContainer = document.getElementById('polls');
@@ -51,6 +74,11 @@ function onIncomingVote(data) {
         <li id="${data.pollId}_${option.answer}">
             <strong>${option.answer}:</strong> ${option.votes} votes
         </li>`).join('');
+
+    // Highlight updated options
+    const updatedOption = document.getElementById(`${data.pollId}_${data.updatedOptions[0].answer}`);
+    updatedOption.classList.add('highlight');
+    setTimeout(() => updatedOption.classList.remove('highlight'), 1000); // Remove highlight after 1 second
 }
 
 // Handles processing a user's vote when they click on an option to vote
@@ -61,12 +89,29 @@ function onVoteClicked(event) {
     const pollId = formData.get("poll-id");
     const selectedOption = event.submitter.value;
 
+    // Disable the buttons
+    const pollForm = event.target;
+    pollForm.querySelectorAll('button').forEach(button => button.disabled = true);
+
+    // Show a loading message or spinner
+    const loadingMessage = document.createElement('p');
+    loadingMessage.textContent = "Submitting vote...";
+    pollForm.appendChild(loadingMessage);
+
     // Send the vote to the server
     socket.send(JSON.stringify({
         type: 'vote',
         pollId: pollId,
         selectedOption: selectedOption,
     }));
+
+    // Optionally, remove the loading message after a short delay (e.g., after the vote is processed)
+    setTimeout(() => {
+        loadingMessage.remove();
+        const thankYouMessage = document.createElement('p');
+        thankYouMessage.textContent = "Thank you for voting!";
+        pollForm.appendChild(thankYouMessage);
+    }, 1500);
 }
 
 // Add event listeners to existing polls
