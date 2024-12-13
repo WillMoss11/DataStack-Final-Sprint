@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
 const Poll = require('./models/Poll');  // Added Poll model import
+const User = require('./models/User');  // Added User model import
 
 const PORT = 3000;
 const MONGO_URI = 'mongodb://localhost:27017/keyin_test';
@@ -24,6 +25,7 @@ app.use(session({
 
 let connectedClients = [];
 
+// WebSocket connection
 app.ws('/ws', (socket, request) => {
     connectedClients.push(socket);
 
@@ -56,6 +58,34 @@ app.get('/signup', async (request, response) => {
         return response.redirect('/dashboard');
     }
     return response.render('signup', { errorMessage: null });
+});
+
+// POST route for signup
+app.post('/signup', async (request, response) => {
+    const { username, password } = request.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+        return response.render('signup', { errorMessage: 'Username already taken.' });
+    }
+
+    // Hash the password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+        username,
+        password: hashedPassword,
+    });
+
+    try {
+        await newUser.save();
+        request.session.user = { id: newUser._id, username: newUser.username };
+        return response.redirect('/dashboard');
+    } catch (error) {
+        console.error('Error signing up:', error);
+        return response.render('signup', { errorMessage: 'There was an error creating your account.' });
+    }
 });
 
 app.get('/dashboard', async (request, response) => {
