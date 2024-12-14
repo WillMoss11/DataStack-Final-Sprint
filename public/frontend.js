@@ -44,29 +44,52 @@ function onNewPollAdded(data) {
 function onIncomingVote(data) {
     const poll = document.getElementById(data.pollId);
     const optionsList = poll.querySelector('.poll-options');
-    optionsList.innerHTML = data.updatedOptions.map(option => `
-        <li id="${data.pollId}_${option.answer}">
-            <strong>${option.answer}:</strong> ${option.votes} votes
-        </li>`).join('');
+    
+    // Update each option's vote count
+    optionsList.innerHTML = '';  // Clear old options list
+    data.updatedOptions.forEach(option => {
+        const optionElement = document.createElement('li');
+        optionElement.id = `${data.pollId}_${option.answer}`;
+        optionElement.innerHTML = `<strong>${option.answer}:</strong> ${option.votes} votes`;
+        optionsList.appendChild(optionElement);
+    });
 }
 
 function onVoteClicked(event) {
     event.preventDefault();
     const formData = new FormData(event.target);
-
     const pollId = formData.get("poll-id");
     const selectedOption = event.submitter.value;
 
-    // Send the vote to the server via WebSocket
+    // Get the user ID from the session (this could be set when the user logs in)
+    const userId = document.getElementById("user-id").value; // Assuming you're passing user ID via a hidden input
+
+    // Send the vote via WebSocket
     socket.send(JSON.stringify({
         type: 'vote',
         pollId: pollId,
         selectedOption: selectedOption,
+        userId: userId // Include user ID to identify who voted
     }));
 
     // Disable all voting buttons for this poll after the vote
-    const buttons = event.target.querySelectorAll('button');
+    const form = event.target; // Get the form element that was submitted
+    const buttons = form.querySelectorAll('button'); // Get all buttons in the form
     buttons.forEach(button => {
-        button.disabled = true;
+        button.disabled = true; // Disable each button
+    });
+
+    // Create and display the "Thanks for voting" message
+    const pollContainer = form.closest('.poll-container');
+    const message = document.createElement('p');
+    message.textContent = 'Thanks for voting!';
+    message.style.fontSize = '16px';
+    message.style.color = '#4CAF50'; // Green color for the success message
+    message.style.marginTop = '10px'; // Add some spacing for visual clarity
+    pollContainer.appendChild(message);
+
+    // Optionally, hide the buttons to avoid accidental clicks
+    buttons.forEach(button => {
+        button.style.display = 'none';
     });
 }

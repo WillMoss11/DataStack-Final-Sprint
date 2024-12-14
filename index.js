@@ -10,6 +10,9 @@ const MONGO_URI = 'mongodb://localhost:27017/keyin_test';
 const app = express();
 expressWs(app);
 
+app.use(express.static(path.join(__dirname, 'public')));
+console.log('Serving static files from /public');
+
 // Initialize MongoDB client
 const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 let db, usersCollection, pollsCollection;
@@ -159,35 +162,34 @@ app.post('/createPoll', async (request, response) => {
     });
 });
 
-// Route to handle voting on polls
-app.post('/votePoll', async (request, response) => {
-    const { selectedOption, pollId } = request.body;
-
-    console.log('Received pollId:', pollId);  
-    console.log('Received selectedOption:', selectedOption);  
+// Backend (Express route for voting)
+app.post('/votePoll', async (req, res) => {
+    const { pollId, selectedOption } = req.body;
 
     try {
-        // Find the poll by ID
         const poll = await pollsCollection.findOne({ _id: new ObjectId(pollId) });
-        if (!poll) {
-            return response.status(404).send('Poll not found');
-        }
-
-        // Find the selected option in the poll
         const option = poll.options.find(opt => opt.answer === selectedOption);
-        if (!option) {
-            return response.status(400).send('Option not found');
+        if (option) {
+            option.votes += 1;
+            await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
+
+            // Broadcast updated poll to all connected WebSocket clients
+            connectedClients.forEach(client => {
+                client.send(JSON.stringify({
+                    type: 'voteUpdate',
+                    pollId: pollId,
+                    updatedOptions: poll.options,
+                }));
+            });
+
+            // Instead of returning JSON, we render the updated poll (or send a success page)
+            res.redirect('/viewPolls');  // Redirect to a page with updated data, like viewPolls
+        } else {
+            throw new Error('Option not found');
         }
-
-        // Increment the vote count for the selected option
-        option.votes += 1;
-        await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
-
-        // Redirect back to the dashboard
-        response.redirect('/dashboard');
-    } catch (error) {
-        console.error('Error voting on poll:', error);
-        response.status(500).send('Internal Server Error');
+    } catch (err) {
+        console.error(err);
+        res.redirect('/viewPolls'); // Handle error, still redirect to viewPolls
     }
 });
 
@@ -215,24 +217,52 @@ async function onCreateNewPoll(question, pollOptions) {
 }
 
 // Handle vote updates and broadcasting
-async function onNewVote(pollId, selectedOption) {
+async function onNewVote(pollId, selectedOption, userId) {
     try {
+        // Fetch the poll from the database
         const poll = await pollsCollection.findOne({ _id: new ObjectId(pollId) });
-        const option = poll.options.find(opt => opt.answer === selectedOption);
-        if (option) {
-            option.votes += 1;
-            await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
 
-            connectedClients.forEach(client => {
-                client.send(JSON.stringify({
-                    type: 'voteUpdate',
-                    pollId: pollId,
-                    updatedOptions: poll.options,
-                }));
-            });
+        // Ensure the poll exists
+        if (!poll) {
+            throw new Error('Poll not found');
         }
+
+        // Check if the user has already voted
+        if (poll.voters && poll.voters.includes(userId)) {
+            throw new Error('User has already voted on this poll');
+        }
+
+        // Find the option that was voted for
+        const option = poll.options.find(opt => opt.answer === selectedOption);
+        if (!option) {
+            throw new Error('Option not found');
+        }
+
+        // Increase the vote count for the selected option
+        option.votes += 1;
+
+        // Add the user to the voters array to prevent multiple votes
+        poll.voters = poll.voters || [];
+        poll.voters.push(userId);
+
+        // Update the poll in the database
+        await pollsCollection.updateOne(
+            { _id: new ObjectId(pollId) },
+            { $set: { options: poll.options, voters: poll.voters } }
+        );
+
+        // Broadcast the updated poll data to all connected clients
+        connectedClients.forEach(client => {
+            client.send(JSON.stringify({
+                type: 'voteUpdate',
+                pollId: pollId,
+                updatedOptions: poll.options,
+            }));
+        });
+
     } catch (error) {
-        console.error('Error updating poll:', error);
+        console.error('Error processing vote:', error);
+        // Handle error (e.g., user already voted)
     }
 }
 
