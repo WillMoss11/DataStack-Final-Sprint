@@ -1,12 +1,15 @@
 <body>
+    <link rel="stylesheet" href="styles.css">  <!-- Link to your CSS file -->
     <div class="main-content">
         <h1>Welcome, <%= user.username %>!</h1>
         <p>You are logged in. Here are some options:</p>
-        <ul>
-            <li><a href="/createPoll" class="action-button">Create a Poll</a></li>
-            <li><a href="/viewPolls" class="action-button">View All Polls</a></li>
-            <li><a href="/logout" class="action-button">Logout</a></li>
-        </ul>
+        
+            <div class="button-container">
+            <a href="/createPoll" class="action-button">Create a Poll</a>
+            <a href="/viewPolls" class="action-button">View All Polls</a>
+            <a href="/logout" class="action-button">Logout</a>
+            </div>
+
     </div>
 
     <script src="/frontend.js" type="application/javascript"></script>

@@ -1,24 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Up</title>
+    <link rel="stylesheet" href="styles.css">  <!-- Link to your CSS file -->
 </head>
 <body>
     <div class="navbar">
         <a href="/" class="nav-button">Home</a>
-        <a href="/login" class="nav-button">Log In</a>
     </div>
 
-    <div class="form-container">
+    <div class="main-container">
+        <!-- Sign Up Heading -->
         <h1>Sign Up</h1>
 
         <% if (errorMessage) { %>
             <p class="error-message"><%= errorMessage %></p>
         <% } %>
 
-        <form action="/signup" method="POST">
+        <!-- Sign Up Form -->
+        <form action="/signup" method="POST" class="form-container">
             <div class="form-input-container">
                 <label for="username">Username:</label>
                 <input type="text" id="username" name="username" required>
@@ -27,12 +24,11 @@
                 <label for="password">Password:</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            <button type="submit">Sign Up</button>
+            <button type="submit" class="action-button">Sign Up</button>
         </form>
 
-        <p style="font-size: 12px; margin-top: 30px;">
-            Already have an account? 
-            <a href="/login" class="register-link">Log in!</a>
+        <p class="redirect-link">
+            Already have an account? <a href="/login" class="register-link">Log in!</a>
         </p>
     </div>
 </body>

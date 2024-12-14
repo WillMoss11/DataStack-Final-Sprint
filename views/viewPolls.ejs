@@ -1,9 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Active Polls</title>
+    <link rel="stylesheet" href="styles.css">  <!-- Link to your CSS file -->
 </head>
 <body>
     <div class="navbar">
@@ -19,9 +15,10 @@
         <% if (polls.length === 0) { %>
             <p>No polls available. <a href="/createPoll">Create a poll</a></p>
         <% } else { %>
-            <ul id="polls">
+            <!-- Polls container to align polls horizontally -->
+            <div class="polls-container">
                 <% polls.forEach((poll) => { %>
-                    <li class="poll-container" id="<%= poll._id %>">
+                    <div class="poll-container" id="<%= poll._id %>">
                         <h2><%= poll.question %></h2>
                         <ul class="poll-options">
                             <% poll.options.forEach((option) => { %>
@@ -34,7 +31,7 @@
                         <!-- Voting form for each poll -->
                         <form action="/votePoll" method="POST" class="poll-form">
                             <input type="hidden" name="pollId" value="<%= poll._id %>" />
-                            
+
                             <!-- Loop through each option and create a vote button -->
                             <% poll.options.forEach(option => { %>
                                 <button type="submit" name="selectedOption" value="<%= option.answer %>" class="action-button vote-button">
@@ -42,11 +39,12 @@
                                 </button>
                             <% }) %>
                         </form>
-                    </li>
-                <% }) %>
-            </ul>
-        <% } %>
 
+                        <div class="vote-message"></div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } %>
     </div>
 </body>
 </html>

@@ -1,32 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <link rel="stylesheet" href="styles.css">  <!-- Link to your CSS file -->
 </head>
 <body>
     <div class="navbar">
         <a href="/" class="nav-button">Home</a>
-        <a href="/signup" class="nav-button">Sign Up</a>
     </div>
 
-    <div class="form-container">
+    <div class="main-container">
+        <!-- Login Heading -->
         <h1>Login</h1>
 
         <% if (errorMessage) { %>
             <p class="error-message"><%= errorMessage %></p>
         <% } %>
 
-        <form action="/login" method="POST">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required><br>
-            
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required><br>
-            
-            <button type="submit">Login</button>
+        <!-- Login Form -->
+        <form action="/login" method="POST" class="form-container">
+            <div class="form-input-container">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-input-container">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="action-button">Login</button>
         </form>
+
+        <p class="redirect-link">
+            Don't have an account? <a href="/signup" class="register-link">Sign Up!</a>
+        </p>
     </div>
 </body>
 </html>
