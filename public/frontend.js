@@ -57,9 +57,16 @@ function onVoteClicked(event) {
     const pollId = formData.get("poll-id");
     const selectedOption = event.submitter.value;
 
+    // Send the vote to the server via WebSocket
     socket.send(JSON.stringify({
         type: 'vote',
         pollId: pollId,
         selectedOption: selectedOption,
     }));
+
+    // Disable all voting buttons for this poll after the vote
+    const buttons = event.target.querySelectorAll('button');
+    buttons.forEach(button => {
+        button.disabled = true;
+    });
 }

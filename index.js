@@ -1,16 +1,26 @@
 const express = require('express');
 const expressWs = require('express-ws');
 const path = require('path');
-const mongoose = require('mongoose');
+const { MongoClient, ObjectId } = require('mongodb'); // Import MongoClient and ObjectId
 const session = require('express-session');
 const bcrypt = require('bcrypt');
-const Poll = require('./models/Poll');  // Poll model import
-const User = require('./models/User');  // User model import
 
 const PORT = 3000;
 const MONGO_URI = 'mongodb://localhost:27017/keyin_test';
 const app = express();
 expressWs(app);
+
+// Initialize MongoDB client
+const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+let db, usersCollection, pollsCollection;
+
+client.connect()
+    .then(() => {
+        db = client.db(); // Get the default database
+        usersCollection = db.collection('users');
+        pollsCollection = db.collection('polls');
+    })
+    .catch(err => console.error('MongoDB connection error:', err));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -39,7 +49,6 @@ app.ws('/ws', (socket, request) => {
         }
     });
 
-    // Remove the client from connected clients on disconnect
     socket.on('close', () => {
         connectedClients = connectedClients.filter(client => client !== socket);
     });
@@ -53,6 +62,7 @@ app.get('/', async (request, response) => {
     response.render('index/unauthenticatedIndex');
 });
 
+// Signup route
 app.get('/signup', async (request, response) => {
     if (request.session.user?.id) {
         return response.redirect('/dashboard');
@@ -65,7 +75,7 @@ app.post('/signup', async (request, response) => {
     const { username, password } = request.body;
 
     // Check if the username is already taken
-    const existingUser = await User.findOne({ username });
+    const existingUser = await usersCollection.findOne({ username });
     if (existingUser) {
         return response.render('signup', { errorMessage: 'Username is already taken' });
     }
@@ -74,17 +84,20 @@ app.post('/signup', async (request, response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create a new user
-    const newUser = new User({ username, password: hashedPassword });
-    await newUser.save();
+    const newUser = {
+        username,
+        password: hashedPassword,
+    };
+    const result = await usersCollection.insertOne(newUser);
 
     // Set session data
-    request.session.user = { id: newUser._id, username: newUser.username };
+    request.session.user = { id: result.insertedId, username };
 
     // Redirect to the dashboard
     return response.redirect('/dashboard');
 });
 
-// GET route for login page
+// Login route
 app.get('/login', async (request, response) => {
     if (request.session.user?.id) {
         return response.redirect('/dashboard');
@@ -95,7 +108,7 @@ app.get('/login', async (request, response) => {
 // POST route for login
 app.post('/login', async (request, response) => {
     const { username, password } = request.body;
-    const user = await User.findOne({ username });
+    const user = await usersCollection.findOne({ username });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
         return response.render('login', { errorMessage: 'Invalid username or password' });
@@ -124,7 +137,6 @@ app.get('/createPoll', async (request, response) => {
         return response.redirect('/');
     }
 
-    // Include successMessage and errorMessage even if they are null
     return response.render('createPoll', { 
         successMessage: null,
         errorMessage: null 
@@ -138,11 +150,9 @@ app.post('/createPoll', async (request, response) => {
 
     const pollCreationError = await onCreateNewPoll(question, formattedOptions);
 
-    // Create the success or error message
     const successMessage = pollCreationError ? null : 'Poll created successfully!';
     const errorMessage = pollCreationError || null;
 
-    // Send both successMessage and errorMessage to the view
     return response.render('createPoll', { 
         errorMessage: errorMessage,
         successMessage: successMessage
@@ -153,12 +163,12 @@ app.post('/createPoll', async (request, response) => {
 app.post('/votePoll', async (request, response) => {
     const { selectedOption, pollId } = request.body;
 
-    console.log('Received pollId:', pollId);  // Log the poll ID
-    console.log('Received selectedOption:', selectedOption);  // Log the selected option
+    console.log('Received pollId:', pollId);  
+    console.log('Received selectedOption:', selectedOption);  
 
     try {
         // Find the poll by ID
-        const poll = await Poll.findById(pollId);
+        const poll = await pollsCollection.findOne({ _id: new ObjectId(pollId) });
         if (!poll) {
             return response.status(404).send('Poll not found');
         }
@@ -171,9 +181,9 @@ app.post('/votePoll', async (request, response) => {
 
         // Increment the vote count for the selected option
         option.votes += 1;
-        await poll.save();
+        await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
 
-        // Redirect back to the dashboard (or wherever you want)
+        // Redirect back to the dashboard
         response.redirect('/dashboard');
     } catch (error) {
         console.error('Error voting on poll:', error);
@@ -184,18 +194,19 @@ app.post('/votePoll', async (request, response) => {
 // Poll creation function
 async function onCreateNewPoll(question, pollOptions) {
     try {
-        const newPoll = new Poll({ question, options: pollOptions });
-        await newPoll.save();
+        const newPoll = {
+            question,
+            options: pollOptions,
+        };
+        const result = await pollsCollection.insertOne(newPoll);
 
-        // Broadcast the new poll to all connected clients
         connectedClients.forEach(client => {
             client.send(JSON.stringify({
                 type: 'newPoll',
                 poll: newPoll,
             }));
         });
-        
-        // Return null if no errors
+
         return null;
     } catch (error) {
         console.error(error);
@@ -206,13 +217,12 @@ async function onCreateNewPoll(question, pollOptions) {
 // Handle vote updates and broadcasting
 async function onNewVote(pollId, selectedOption) {
     try {
-        const poll = await Poll.findById(pollId);
+        const poll = await pollsCollection.findOne({ _id: new ObjectId(pollId) });
         const option = poll.options.find(opt => opt.answer === selectedOption);
         if (option) {
             option.votes += 1;
-            await poll.save();
+            await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
 
-            // Broadcast updated votes to all connected clients
             connectedClients.forEach(client => {
                 client.send(JSON.stringify({
                     type: 'voteUpdate',
@@ -233,7 +243,7 @@ app.get('/viewPolls', async (request, response) => {
     }
 
     // Fetch all polls from MongoDB
-    const polls = await Poll.find({});
+    const polls = await pollsCollection.find({}).toArray();
     return response.render('viewPolls', { polls });
 });
 
@@ -247,7 +257,4 @@ app.get('/logout', (req, res) => {
     });
 });
 
-
-mongoose.connect(MONGO_URI)
-    .then(() => app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`)))
-    .catch((err) => console.error('MongoDB connection error:', err));
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
