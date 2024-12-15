@@ -194,14 +194,16 @@ app.post('/votePoll', async (req, res) => {
 });
 
 // Poll creation function
-async function onCreateNewPoll(question, pollOptions) {
+async function onCreateNewPoll(question, pollOptions, userId) {
     try {
         const newPoll = {
             question,
             options: pollOptions,
+            createdBy: userId,  // Store the userId of the creator
         };
         const result = await pollsCollection.insertOne(newPoll);
 
+        // Broadcast the new poll to all connected clients
         connectedClients.forEach(client => {
             client.send(JSON.stringify({
                 type: 'newPoll',
