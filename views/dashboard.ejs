@@ -2,7 +2,10 @@
     <link rel="stylesheet" href="styles.css">  <!-- Link to the CSS file -->
     <div class="main-content">
         <h1>Welcome, <%= user.username %>!</h1>
-        <p>You are logged in. Here are some options:</p>
+        <p>You are now logged in.</p>
+        <p>You have created <strong><%= pollCount %></strong> polls.</p>
+        <p>You have Voted In <strong><%= pollsVotedInCount %></strong> polls.</p>
+        <p>Here are some options for you:</p>
         
             <div class="button-container">
             <a href="/createPoll" class="action-button">Create a Poll</a>

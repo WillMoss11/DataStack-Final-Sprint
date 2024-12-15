@@ -34,6 +34,7 @@ app.use(session({
     secret: 'voting-app-secret',
     resave: false,
     saveUninitialized: false,
+    cookie: { secure: false }  // Ensure secure is false for non-https connections in development
 }));
 
 let connectedClients = [];
@@ -95,6 +96,7 @@ app.post('/signup', async (request, response) => {
 
     // Set session data
     request.session.user = { id: result.insertedId, username };
+    console.log('Session after signup:', request.session.user);
 
     // Redirect to the dashboard
     return response.redirect('/dashboard');
@@ -119,18 +121,31 @@ app.post('/login', async (request, response) => {
 
     // Set session data
     request.session.user = { id: user._id, username: user.username };
+    console.log('Session after login:', request.session.user);
 
     return response.redirect('/dashboard');
-});
 
+    });
+   
 // Dashboard route
 app.get('/dashboard', async (req, res) => {
     if (!req.session.user?.id) {
         return res.redirect('/'); // If no user is logged in, redirect to login
     }
 
+    // Fetch the logged-in user's data
+    const user = await usersCollection.findOne({ _id: new ObjectId(req.session.user.id) });
+
+    // Fetch the count of polls the user has created
+    const pollsCreated = await pollsCollection.countDocuments({ createdBy: new ObjectId(req.session.user.id) });
+
+    // Fetch the count of polls the user has voted in
+    const pollsVotedInCount = user?.votedPolls?.length || 0;  // Default to 0 if no voted polls
+
     return res.render('dashboard', {
-        user: req.session.user, // You can access the session data in your EJS
+        user: req.session.user,
+        pollsCreated: pollsCreated,
+        pollsVotedInCount: pollsVotedInCount, // Pass the voted polls count to the view
     });
 });
 
@@ -139,11 +154,7 @@ app.get('/createPoll', async (request, response) => {
     if (!request.session.user?.id) {
         return response.redirect('/');
     }
-
-    return response.render('createPoll', { 
-        successMessage: null,
-        errorMessage: null 
-    });
+    return response.render('createPoll', { successMessage: null, errorMessage: null });
 });
 
 // Poll creation route
@@ -151,7 +162,7 @@ app.post('/createPoll', async (request, response) => {
     const { question, options } = request.body;
     const formattedOptions = Object.values(options).map(option => ({ answer: option, votes: 0 }));
 
-    const pollCreationError = await onCreateNewPoll(question, formattedOptions);
+    const pollCreationError = await onCreateNewPoll(question, formattedOptions, request.session.user.id);
 
     const successMessage = pollCreationError ? null : 'Poll created successfully!';
     const errorMessage = pollCreationError || null;
@@ -253,6 +264,12 @@ async function onNewVote(pollId, selectedOption, userId) {
             { $set: { options: poll.options, voters: poll.voters } }
         );
 
+        // Update the user's voted polls list
+        await usersCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            { $addToSet: { votedPolls: pollId } }  // Ensure pollId is added if not already present
+        );
+
         // Broadcast the updated poll data to all connected clients
         connectedClients.forEach(client => {
             client.send(JSON.stringify({
@@ -273,8 +290,7 @@ app.get('/viewPolls', async (request, response) => {
     if (!request.session.user?.id) {
         return response.redirect('/');
     }
-
-    // Fetch all polls from MongoDB
+    // Collecting from MongoDB
     const polls = await pollsCollection.find({}).toArray();
     return response.render('viewPolls', { polls });
 });
