@@ -14,7 +14,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 console.log('Serving static files from /public');
 
 // Initialize MongoDB client
-const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+const client = new MongoClient(MONGO_URI);
 let db, usersCollection, pollsCollection;
 
 client.connect()
@@ -23,7 +23,10 @@ client.connect()
         usersCollection = db.collection('users');
         pollsCollection = db.collection('polls');
     })
-    .catch(err => console.error('MongoDB connection error:', err));
+    .catch(err => {
+        console.error('MongoDB connection error:', err);
+        setTimeout(() => client.connect(), 5000);  // Retry connection
+    });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -75,6 +78,7 @@ app.get('/signup', async (request, response) => {
 });
 
 // POST route for signup
+// POST route for signup
 app.post('/signup', async (request, response) => {
     const { username, password } = request.body;
 
@@ -87,19 +91,30 @@ app.post('/signup', async (request, response) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create a new user
+    // Create a new user with initial counts
     const newUser = {
         username,
         password: hashedPassword,
+        pollsCreated: 0,  // Initialize pollsCreated to 0
+        pollsVoted: 0,     // Initialize pollsVoted to 0
+        votedPolls: []  // Initialize votedPolls as an empty array
     };
     const result = await usersCollection.insertOne(newUser);
 
     // Set session data
     request.session.user = { id: result.insertedId, username };
-    console.log('Session after signup:', request.session.user);
+    // After setting the session data in signup or login routes
+    console.log('Session after signup:', request.session);
 
-    // Redirect to the dashboard
-    return response.redirect('/dashboard');
+    // Explicitly save the session after setting it
+    request.session.save((err) => {
+        if (err) {
+            console.error('Error saving session:', err);
+            return response.redirect('/signup');
+        }
+        // Redirect to the dashboard after saving the session
+        return response.redirect('/dashboard');
+    });
 });
 
 // Login route
@@ -121,11 +136,19 @@ app.post('/login', async (request, response) => {
 
     // Set session data
     request.session.user = { id: user._id, username: user.username };
+    // After setting the session data in signup or login routes
     console.log('Session after login:', request.session.user);
 
-    return response.redirect('/dashboard');
-
+    // Explicitly save the session after setting it
+    request.session.save((err) => {
+        if (err) {
+            console.error('Error saving session:', err);
+            return response.redirect('/login');
+        }
+        // Redirect to the dashboard after saving the session
+        return response.redirect('/dashboard');
     });
+});
    
 // Dashboard route
 app.get('/dashboard', async (req, res) => {
@@ -133,19 +156,13 @@ app.get('/dashboard', async (req, res) => {
         return res.redirect('/'); // If no user is logged in, redirect to login
     }
 
-    // Fetch the logged-in user's data
+    // Fetch the user data including the pollsCreated and pollsVoted
     const user = await usersCollection.findOne({ _id: new ObjectId(req.session.user.id) });
-
-    // Fetch the count of polls the user has created
-    const pollsCreated = await pollsCollection.countDocuments({ createdBy: new ObjectId(req.session.user.id) });
-
-    // Fetch the count of polls the user has voted in
-    const pollsVotedInCount = user?.votedPolls?.length || 0;  // Default to 0 if no voted polls
 
     return res.render('dashboard', {
         user: req.session.user,
-        pollsCreated: pollsCreated,
-        pollsVotedInCount: pollsVotedInCount, // Pass the voted polls count to the view
+        pollsCreated: user?.pollsCreated || 0,  // Render the pollsCreated count
+        pollsVoted: user?.pollsVoted || 0,    // Render the pollsVoted count
     });
 });
 
@@ -159,10 +176,22 @@ app.get('/createPoll', async (request, response) => {
 
 // Poll creation route
 app.post('/createPoll', async (request, response) => {
+    if (!request.session.user?.id) {
+        return response.redirect('/'); // Ensure session exists
+    }
+
     const { question, options } = request.body;
     const formattedOptions = Object.values(options).map(option => ({ answer: option, votes: 0 }));
 
-    const pollCreationError = await onCreateNewPoll(question, formattedOptions, request.session.user.id);
+    const pollCreationError = await onCreateNewPoll(question, formattedOptions);
+
+    // Update pollsCreated count for the logged-in user
+    if (!pollCreationError) {
+        await usersCollection.updateOne(
+            { _id: new ObjectId(request.session.user.id) },
+            { $inc: { pollsCreated: 1 } }  // Increment pollsCreated counter
+        );
+    }
 
     const successMessage = pollCreationError ? null : 'Poll created successfully!';
     const errorMessage = pollCreationError || null;
@@ -181,8 +210,20 @@ app.post('/votePoll', async (req, res) => {
         const poll = await pollsCollection.findOne({ _id: new ObjectId(pollId) });
         const option = poll.options.find(opt => opt.answer === selectedOption);
         if (option) {
+            // Increase the vote count
             option.votes += 1;
             await pollsCollection.updateOne({ _id: new ObjectId(pollId) }, { $set: { options: poll.options } });
+
+            const user = await usersCollection.findOne({ _id: new ObjectId(req.session.user.id) });
+
+            // Check if the user has already voted on this poll
+            if (!user.votedPolls.includes(pollId)) {
+                // User hasn't voted on this poll yet, so increment the pollsVoted count
+                await usersCollection.updateOne(
+                    { _id: new ObjectId(req.session.user.id) },
+                    { $inc: { pollsVoted: 1 }, $push: { votedPolls: pollId } }  // Add the pollId to votedPolls array
+                );
+            }
 
             // Broadcast updated poll to all connected WebSocket clients
             connectedClients.forEach(client => {
@@ -193,8 +234,7 @@ app.post('/votePoll', async (req, res) => {
                 }));
             });
 
-            // Instead of returning JSON, we render the updated poll (or send a success page)
-            res.redirect('/viewPolls');  // Redirect to a page with updated data, like viewPolls
+            res.redirect('/viewPolls');  // Redirect after voting
         } else {
             throw new Error('Option not found');
         }
@@ -205,16 +245,15 @@ app.post('/votePoll', async (req, res) => {
 });
 
 // Poll creation function
-async function onCreateNewPoll(question, pollOptions, userId) {
+async function onCreateNewPoll(question, pollOptions) {
     try {
         const newPoll = {
             question,
             options: pollOptions,
-            createdBy: userId,  // Store the userId of the creator
+            voters: [] // Initialize voters as an empty array
         };
         const result = await pollsCollection.insertOne(newPoll);
 
-        // Broadcast the new poll to all connected clients
         connectedClients.forEach(client => {
             client.send(JSON.stringify({
                 type: 'newPoll',
@@ -240,8 +279,11 @@ async function onNewVote(pollId, selectedOption, userId) {
             throw new Error('Poll not found');
         }
 
+        // Initialize voters if it's not present
+        poll.voters = poll.voters || [];
+
         // Check if the user has already voted
-        if (poll.voters && poll.voters.includes(userId)) {
+        if (poll.voters.includes(userId)) {
             throw new Error('User has already voted on this poll');
         }
 
@@ -255,19 +297,12 @@ async function onNewVote(pollId, selectedOption, userId) {
         option.votes += 1;
 
         // Add the user to the voters array to prevent multiple votes
-        poll.voters = poll.voters || [];
         poll.voters.push(userId);
 
         // Update the poll in the database
         await pollsCollection.updateOne(
             { _id: new ObjectId(pollId) },
             { $set: { options: poll.options, voters: poll.voters } }
-        );
-
-        // Update the user's voted polls list
-        await usersCollection.updateOne(
-            { _id: new ObjectId(userId) },
-            { $addToSet: { votedPolls: pollId } }  // Ensure pollId is added if not already present
         );
 
         // Broadcast the updated poll data to all connected clients
